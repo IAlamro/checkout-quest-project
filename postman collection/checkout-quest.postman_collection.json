@@ -1,0 +1,704 @@
+{
+  "info": {
+    "name": "Checkout Quest",
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "description": "Full API test suite for the checkout-quest modular monolith.\n\nHappy-path flow (run in order):\n1. Create Cart\n2. Add Item (x2)\n3. Get Cart\n4. Checkout Cart  →  sets orderId\n5. Get Order\n6. Initiate Payment  →  sets paymentId + providerRef\n7. Get Payment\n8. Simulate Confirm (mock provider)\n9. Get Payment (expect CONFIRMED)\n10. Get Order (expect PAID)\n11. Ledger checks\n\nCollection variables (auto-populated by test scripts):\n- baseUrl   : http://localhost:8080\n- mockUrl   : http://localhost:8081\n- cartId\n- orderId\n- paymentId\n- providerRef",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",    "value": "http://localhost:8080" },
+    { "key": "mockUrl",    "value": "http://localhost:8081"  },
+    { "key": "cartId",     "value": "" },
+    { "key": "orderId",    "value": "" },
+    { "key": "paymentId",  "value": "" },
+    { "key": "providerRef","value": "" }
+  ],
+  "item": [
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "1. Create Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('cartId present', () => pm.expect(body.cartId).to.be.a('string'));",
+                  "pm.collectionVariables.set('cartId', body.cartId);",
+                  "console.log('cartId =', body.cartId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carts",
+              "host": ["{{baseUrl}}"],
+              "path": ["carts"]
+            }
+          }
+        },
+        {
+          "name": "2a. Add Item — Laptop",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is OPEN', () => pm.expect(body.status).to.eql('OPEN'));",
+                  "pm.test('items has 1 entry', () => pm.expect(body.items.length).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"prod-laptop-001\",\n  \"quantity\": 1,\n  \"unitPrice\": 1299.99,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/carts/{{cartId}}/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["carts", "{{cartId}}", "items"]
+            }
+          }
+        },
+        {
+          "name": "2b. Add Item — Mouse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('items has 2 entries', () => pm.expect(body.items.length).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"prod-mouse-007\",\n  \"quantity\": 2,\n  \"unitPrice\": 49.99,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/carts/{{cartId}}/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["carts", "{{cartId}}", "items"]
+            }
+          }
+        },
+        {
+          "name": "3. Get Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is OPEN', () => pm.expect(body.status).to.eql('OPEN'));",
+                  "pm.test('2 items', () => pm.expect(body.items.length).to.eql(2));",
+                  "pm.test('totalAmount correct', () => {",
+                  "  // 1*1299.99 + 2*49.99 = 1399.97",
+                  "  pm.expect(Number(body.totalAmount)).to.be.closeTo(1399.97, 0.01);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carts/{{cartId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["carts", "{{cartId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Order",
+      "item": [
+        {
+          "name": "4. Checkout Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('orderId present', () => pm.expect(body.orderId).to.be.a('string'));",
+                  "pm.collectionVariables.set('orderId', body.orderId);",
+                  "console.log('orderId =', body.orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carts/{{cartId}}/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["carts", "{{cartId}}", "checkout"]
+            }
+          }
+        },
+        {
+          "name": "5. Get Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is CREATED', () => pm.expect(body.status).to.eql('CREATED'));",
+                  "pm.test('2 items', () => pm.expect(body.items.length).to.eql(2));",
+                  "pm.test('totalAmount correct', () => {",
+                  "  pm.expect(Number(body.totalAmount)).to.be.closeTo(1399.97, 0.01);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "5b. Get Order — After Payment (expect PAID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is PAID', () => pm.expect(body.status).to.eql('PAID'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "ERR — Checkout Empty Cart (expect 500)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 4xx or 5xx', () => pm.expect(pm.response.code).to.be.at.least(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/carts/non-existent-cart-id/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["carts", "non-existent-cart-id", "checkout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment",
+      "item": [
+        {
+          "name": "6. Initiate Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code !== 201) {",
+                  "  console.error('Initiate Payment failed:', pm.response.text());",
+                  "  return;",
+                  "}",
+                  "const body = pm.response.json();",
+                  "pm.test('paymentId present', () => pm.expect(body.paymentId).to.be.a('string'));",
+                  "pm.test('providerRef present', () => pm.expect(body.providerRef).to.be.a('string'));",
+                  "pm.collectionVariables.set('paymentId', body.paymentId);",
+                  "// providerRef is also captured in step 7 (GET Payment) which is more reliable",
+                  "if (body.providerRef) pm.collectionVariables.set('providerRef', body.providerRef);",
+                  "console.log('paymentId =',  body.paymentId);",
+                  "console.log('providerRef =', body.providerRef);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",    "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pay-idem-{{$randomUUID}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1399.97,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/payment/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "payment", "start"]
+            }
+          }
+        },
+        {
+          "name": "6b. Initiate Payment — Idempotency Replay (same key)",
+          "event": [
+            {
+              "listen": "pre-request",
+              "script": {
+                "exec": [
+                  "// Override idempotency key to a fixed value to test replay",
+                  "pm.request.headers.upsert({ key: 'Idempotency-Key', value: 'pay-idem-replay-fixed-key-123' });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// First call reserves the key; replay returns cached 201 or 409 if in-progress",
+                  "pm.test('Status 201 or 409', () => {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",    "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "pay-idem-replay-fixed-key-123" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1399.97,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/payment/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "payment", "start"]
+            }
+          }
+        },
+        {
+          "name": "7. Get Payment (expect AUTHORIZED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is AUTHORIZED', () => pm.expect(body.status).to.eql('AUTHORIZED'));",
+                  "pm.test('providerRef set', () => pm.expect(body.providerRef).to.be.a('string'));",
+                  "// Authoritative capture — read model always has providerRef once AUTHORIZED",
+                  "pm.collectionVariables.set('paymentId',  body.paymentId);",
+                  "pm.collectionVariables.set('providerRef', body.providerRef);",
+                  "console.log('providerRef captured =', body.providerRef);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "payments"]
+            }
+          }
+        },
+        {
+          "name": "7b. Get Payment (expect CONFIRMED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status is CONFIRMED', () => pm.expect(body.status).to.eql('CONFIRMED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "payments"]
+            }
+          }
+        },
+        {
+          "name": "Retry Payment (after FAILED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code !== 201) {",
+                  "  console.error('Retry Payment failed:', pm.response.text());",
+                  "  return;",
+                  "}",
+                  "const body = pm.response.json();",
+                  "pm.test('new paymentId', () => pm.expect(body.paymentId).to.be.a('string'));",
+                  "pm.collectionVariables.set('paymentId', body.paymentId);",
+                  "// Re-run '7. Get Payment' after this to capture the new providerRef from the read model",
+                  "if (body.providerRef) pm.collectionVariables.set('providerRef', body.providerRef);",
+                  "console.log('retry paymentId =',  body.paymentId);",
+                  "console.log('retry providerRef =', body.providerRef);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "retry-idem-{{$randomUUID}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/payments/retry",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "payments", "retry"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (manual simulation)",
+      "item": [
+        {
+          "name": "Webhook — AUTHORIZED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"evt-auth-{{$randomUUID}}\",\n  \"providerRef\": \"{{providerRef}}\",\n  \"type\": \"AUTHORIZED\",\n  \"reason\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "webhook"]
+            }
+          }
+        },
+        {
+          "name": "Webhook — CONFIRMED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"evt-conf-{{$randomUUID}}\",\n  \"providerRef\": \"{{providerRef}}\",\n  \"type\": \"CONFIRMED\",\n  \"reason\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "webhook"]
+            }
+          }
+        },
+        {
+          "name": "Webhook — FAILED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"evt-fail-{{$randomUUID}}\",\n  \"providerRef\": \"{{providerRef}}\",\n  \"type\": \"FAILED\",\n  \"reason\": \"Insufficient funds\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "webhook"]
+            }
+          }
+        },
+        {
+          "name": "Webhook — Duplicate (idempotent replay)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Replaying an already-processed eventId must be a no-op (200, not 500)",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"evt-conf-duplicate-fixed-id\",\n  \"providerRef\": \"{{providerRef}}\",\n  \"type\": \"CONFIRMED\",\n  \"reason\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "webhook"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mock Payment Provider",
+      "item": [
+        {
+          "name": "8. Confirm Payment (mock provider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status CONFIRMED', () => pm.expect(body.status).to.eql('CONFIRMED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{mockUrl}}/payments/{{providerRef}}/confirm",
+              "host": ["{{mockUrl}}"],
+              "path": ["payments", "{{providerRef}}", "confirm"]
+            }
+          }
+        },
+        {
+          "name": "Fail Payment (mock provider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('status FAILED', () => pm.expect(body.status).to.eql('FAILED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{mockUrl}}/payments/{{providerRef}}/fail?reason=Insufficient+funds",
+              "host": ["{{mockUrl}}"],
+              "path": ["payments", "{{providerRef}}", "fail"],
+              "query": [{ "key": "reason", "value": "Insufficient funds" }]
+            }
+          }
+        },
+        {
+          "name": "List Pending Payments (mock provider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is object', () => pm.expect(pm.response.json()).to.be.an('object'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mockUrl}}/payments",
+              "host": ["{{mockUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ledger",
+      "item": [
+        {
+          "name": "Get Chart of Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('accounts list', () => pm.expect(body).to.be.an('array'));",
+                  "pm.test('at least one account', () => pm.expect(body.length).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ledger/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["ledger", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "Get Journal Entries",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('journal entries list', () => pm.expect(body).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ledger/journal-entries",
+              "host": ["{{baseUrl}}"],
+              "path": ["ledger", "journal-entries"]
+            }
+          }
+        },
+        {
+          "name": "Get Trial Balance (expect balanced)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('balanced field present', () => pm.expect(body).to.have.property('balanced'));",
+                  "pm.test('debit/credit totals present', () => {",
+                  "  pm.expect(body).to.have.property('totalDebitBalances');",
+                  "  pm.expect(body).to.have.property('totalCreditBalances');",
+                  "});",
+                  "// After a confirmed payment, debits must equal credits",
+                  "pm.test('books are balanced', () => pm.expect(body.balanced).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ledger/trial-balance",
+              "host": ["{{baseUrl}}"],
+              "path": ["ledger", "trial-balance"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "H2 Console",
+      "item": [
+        {
+          "name": "H2 Console (browser)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/h2-console",
+              "host": ["{{baseUrl}}"],
+              "path": ["h2-console"]
+            },
+            "description": "Open in browser. JDBC URL: jdbc:h2:file:./data/checkout  User: sa  Password: (empty)"
+          }
+        }
+      ]
+    }
+  ]
+}

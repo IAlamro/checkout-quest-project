@@ -1,0 +1,3 @@
+com\mockprovider\web\MockProviderController.class
+com\mockprovider\web\dto\RegisterPaymentRequest.class
+com\mockprovider\MockPaymentProviderApplication.class

@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: checkout-quest
+
+  datasource:
+    url: jdbc:h2:file:./data/checkout;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    target: 9  # V10 partial index requires PostgreSQL; H2 enforces this at app layer
+
+scheduling:
+  outbox-relay-interval-ms: 500
+  outbox-max-retries: 5
+
+mock:
+  provider:
+    url: http://localhost:8081
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.checkout: INFO
+    org.flywaydb: INFO
