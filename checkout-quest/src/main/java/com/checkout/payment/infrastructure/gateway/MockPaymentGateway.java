@@ -10,12 +10,11 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Calls the external mock-payment-provider service when mock.provider.url is set.
- * Falls back to local ref generation when the property is blank (tests, offline dev).
- */
+import static com.checkout.shared.infrastructure.config.CircuitBreakerConfig.PAYMENT_PROVIDER_CB;
+
 @Component
 @RequiredArgsConstructor
 public class MockPaymentGateway implements PaymentGateway {
@@ -23,6 +22,7 @@ public class MockPaymentGateway implements PaymentGateway {
     private static final Logger log = LoggerFactory.getLogger(MockPaymentGateway.class);
 
     private final MockProviderClient mockProviderClient;
+    private final CircuitBreakerFactory<?, ?> circuitBreakerFactory;
 
     @Value("${mock.provider.url:}")
     private String mockProviderUrl;
@@ -34,15 +34,27 @@ public class MockPaymentGateway implements PaymentGateway {
             log.debug("mock.provider.url not set - using local providerRef {}", localRef);
             return new ProviderRef(localRef);
         }
+
         var request = new CreateIntentRequest(
                 paymentId,
                 amount.amount().toPlainString(),
                 amount.currency().getCurrencyCode()
         );
-        CreateIntentResponse response = mockProviderClient.createIntent(request);
-        if (response == null || response.providerRef() == null) {
-            throw new IllegalStateException("Mock provider returned no providerRef for payment " + paymentId);
-        }
-        return new ProviderRef(response.providerRef());
+
+        return circuitBreakerFactory.create(PAYMENT_PROVIDER_CB).run(
+                () -> {
+                    CreateIntentResponse response = mockProviderClient.createIntent(request);
+                    if (response == null || response.providerRef() == null) {
+                        throw new IllegalStateException(
+                                "Mock provider returned no providerRef for payment " + paymentId);
+                    }
+                    return new ProviderRef(response.providerRef());
+                },
+                throwable -> {
+                    log.warn("Payment provider call failed for payment {} — circuit breaker state: {}",
+                            paymentId, throwable.getMessage());
+                    throw new PaymentProviderUnavailableException(paymentId, throwable);
+                }
+        );
     }
 }

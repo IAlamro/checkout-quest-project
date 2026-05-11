@@ -9,6 +9,7 @@ import com.checkout.order.domain.InvalidOrderTransitionException;
 import com.checkout.payment.application.usecase.getpayment.GetPaymentHandler;
 import com.checkout.payment.application.usecase.initiatepayment.InitiatePaymentHandler;
 import com.checkout.payment.domain.Payment;
+import com.checkout.payment.infrastructure.gateway.PaymentProviderUnavailableException;
 import com.checkout.shared.eventsourcing.EventStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,6 +80,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DoubleEntryService.UnbalancedEntryException.class)
     public ResponseEntity<ErrorResponse> handleUnbalancedEntry(DoubleEntryService.UnbalancedEntryException ex) {
         return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+    }
+
+    @ExceptionHandler(PaymentProviderUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleProviderUnavailable(PaymentProviderUnavailableException ex) {
+        log.warn("Payment provider unavailable: {}", ex.getMessage());
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

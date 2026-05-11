@@ -682,6 +682,7 @@ Every error comes back in the same shape:
 | 404 Not Found | The cart, order, or payment does not exist |
 | 409 Conflict | Cart is locked, a payment is already active for the order, or an optimistic concurrency failure occurred |
 | 422 Unprocessable Entity | An invalid state transition, like trying to confirm an already-failed payment |
+| 503 Service Unavailable | The payment provider is down or the circuit breaker is open |
 | 500 Internal Server Error | Something unexpected happened - check the application logs |
 
 ---
@@ -1096,3 +1097,11 @@ Every financial system eventually needs an audit trail that cannot lie. Double-e
 **Idempotency at Three Layers**
 
 Payment operations are protected at three distinct points. The HTTP idempotency filter stores the first response and replays it verbatim on duplicate requests with the same key. A database uniqueness constraint ensures that even if two requests race past the filter simultaneously, only one active payment per order can exist. Webhook deduplication using `processed_webhook_events` ensures that a provider redelivering the same event is a no-op at the domain level.
+
+**Circuit Breaker on the Payment Gateway**
+
+The `MockPaymentGateway` wraps its outbound call to the payment provider inside a Resilience4J circuit breaker. When the provider is healthy everything is transparent. When failures exceed the threshold the circuit opens, and subsequent calls fail immediately rather than hanging until a timeout. This protects the rest of the system from being held hostage by an unresponsive upstream dependency.
+
+The circuit is tuned conservatively: it evaluates the last 5 calls and opens at 50% failure rate, but requires at least 3 calls before it will open at all so a single bad request on startup does not trigger it. Once open, it stays open for 10 seconds before switching to half-open and allowing 2 probe calls through to decide whether the provider has recovered.
+
+From the API caller's perspective, a tripped circuit breaker returns a 503 Service Unavailable rather than a timeout after 5 seconds. The circuit is named `payment-provider` so you can observe its state in the Actuator health endpoint if you add `management.endpoints.web.exposure.include=health,circuitbreakers` to your configuration.

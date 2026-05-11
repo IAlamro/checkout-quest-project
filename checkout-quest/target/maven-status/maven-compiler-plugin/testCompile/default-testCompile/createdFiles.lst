@@ -1,4 +1,0 @@
-com\checkout\integration\CheckoutIntegrationTest.class
-com\checkout\domain\PaymentDomainTest.class
-com\checkout\arch\ArchitectureRulesTest.class
-com\checkout\domain\OrderStateMachineTest.class
